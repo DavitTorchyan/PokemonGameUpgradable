@@ -141,8 +141,8 @@ contract Pokemon is IERC721, Ownable, Pausable {
         );
         require(pokemons[ownId].inABattle != true && pokemons[oppId].inABattle != true, "Pokemons currently in a battle!");
 
-        PokemonData memory pokemon1 = pokemons[ownId];
-        PokemonData memory pokemon2 = pokemons[oppId];
+        PokemonData storage pokemon1 = pokemons[ownId];
+        PokemonData storage pokemon2 = pokemons[oppId];
         pokemon1.lastBattleTime = block.timestamp;
         pokemon2.lastBattleTime = block.timestamp;
         pokemon1.inABattle = true;
