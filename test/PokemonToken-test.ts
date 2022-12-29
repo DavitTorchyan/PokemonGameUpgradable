@@ -1,6 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("Pokemon", function () {
   async function deployTokenFixture() {
@@ -136,7 +137,7 @@ describe("Pokemon", function () {
       })
 
       it("Should unpause the contract successfuly.", async () => {
-        const { nft, acc1, acc2, acc3, owner } = await loadFixture(deployTokenFixture);
+        const { nft, acc1, acc2, owner } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
         await nft.connect(acc2).mint();
         await nft.connect(owner).pause();
@@ -152,10 +153,40 @@ describe("Pokemon", function () {
 
     describe("Battle", () => {
       it("Should battle correctly.", async () => {
-        const { nft, acc1, acc2, owner } = await loadFixture(deployTokenFixture);
+        const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
         await nft.connect(acc2).mint();
+        const pokemon1Strength = (await nft.pokemon(1)).strength;
+        const pokemon2Strength = (await nft.pokemon(2)).strength; 
+        await nft.connect(acc1).battle(1, 2, acc2.address);
         
+        console.log(pokemon1Strength, pokemon2Strength);        
+      })
+
+      it("Should revert when you try to battle not with your pokemon.", async () => {
+        const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
+        await nft.connect(acc1).mint();
+        await nft.connect(acc2).mint();
+        await expect(nft.connect(acc1).battle(2, 1, acc2.address)).to.be.revertedWith("You don't own that pokemon!");
+      })
+
+      it("Should revert when you try to battle with a pokemon that opponent doesn't own.", async () => {
+        const { nft, acc1, acc2, acc3 } = await loadFixture(deployTokenFixture);
+        await nft.connect(acc1).mint();
+        await nft.connect(acc3).mint();
+        await expect(nft.connect(acc1).battle(1, 2, acc2.address)).to.be.revertedWith("Opponent does'nt own that pokemon!");
+      })
+
+      it.only("Should revert when you try to battle while the cooldown.", async () => {
+        const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
+        await nft.connect(acc1).mint();
+        await nft.connect(acc2).mint();
+        await time.increase(10);
+        await nft.connect(acc1).battle(1, 2, acc2.address);
+        await time.increase(10);
+        console.log((await nft.pokemon(1)).lastBattleTime);        
+        
+        await expect(nft.connect(acc1).battle(1, 2, acc2.address)).to.be.revertedWith("Pokemons still in cooldown!");
       })
     })
 

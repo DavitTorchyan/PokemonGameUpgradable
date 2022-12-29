@@ -158,7 +158,11 @@ contract Pokemon is IERC721, Ownable, Pausable {
             pokemon1.strength += pokemon2.strength;   
             if(pokemon1.strength > 1500) {pokemon1.strength = 1500;}
             pokemon2.totalLosses += 1;
-            pokemon2.strength -= pok1StrengthBefore / 2;
+            pokemon2.strength -= pok1StrengthBefore / 2;   
+
+            //todo  can be a situation when pokemon2.strength is smaller than pokmeon1.strength / 2
+            //todo  can be a situation when some pokemons strength is as low as zero after some losses
+            
             emit BattleEnded(msg.sender, opponent, ownId, oppId, block.timestamp);
 
         } else {
