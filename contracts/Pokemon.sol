@@ -27,11 +27,18 @@ contract Pokemon is IERC721, Ownable, Pausable {
         bool inABattle;
     }
 
+    struct BattleRequest {
+        bool requested;
+        uint256 requestTime;
+    }
+
     event BattleStarted(address indexed opponent1, address indexed opponent2, uint256 pokemon1Id, uint256 pokemon2Id, uint256 startTime);
     event BattleEnded(address indexed winner, address indexed loser, uint256 winnerPokemonId, uint256 loserPokemonId, uint256 endTime);
 
-    // account => tokenId => PokemonData
+    // tokenId => PokemonData
     mapping(uint256 => PokemonData) private pokemons;
+    // tokenId => tokenId => true if in a battle...
+    mapping(uint256 => mapping(uint256 => BattleRequest)) public pendingBattles;
     mapping(address => uint256) private balances;
     mapping(uint256 => address) private ownerOfPokemon;
     mapping(address => mapping(address => mapping(uint256 => bool))) private allowances;
@@ -64,8 +71,11 @@ contract Pokemon is IERC721, Ownable, Pausable {
         totalSupply += 1;
         ownerOfPokemon[totalSupply] = msg.sender;
         balances[msg.sender] += 1;                                                  
-        pokemons[totalSupply] = PokemonData({id: totalSupply, dna: _randomDna(), name: name, age: 0,
-        birthTime: block.timestamp, lastBattleTime: 0, totalWins: 0, totalLosses: 0, strength: _randomStrength(), inABattle: false});
+        pokemons[totalSupply] = PokemonData({
+        id: totalSupply, dna: _randomDna(), name: name, age: 0,
+        birthTime: block.timestamp, lastBattleTime: 0, totalWins: 0, totalLosses: 0,
+        strength: _randomStrength(), inABattle: false
+        });
 
         emit Transfer(address(0), msg.sender, totalSupply);
     }
@@ -103,7 +113,7 @@ contract Pokemon is IERC721, Ownable, Pausable {
 
     function _randomDna() private returns(string memory) {
         uint256 maxNumber = 16;
-        uint256 minNumber = 0;
+        uint256 minNumber = 1;
         string memory hat = Strings.toString(uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, randNonce))) % (maxNumber-minNumber));
         bytes memory hat_ = bytes(hat);
         if(hat_.length < 2) {hat = string(abi.encodePacked("0", hat));}
@@ -133,49 +143,57 @@ contract Pokemon is IERC721, Ownable, Pausable {
         return amount;
     }
 
-    function battle(uint256 ownId, uint256 oppId, address opponent) external whenNotPaused {
-        require(ownerOfPokemon[ownId] == msg.sender, "You don't own that pokemon!");
+    function requestBattle(uint256 ownId, address opponent, uint256 oppId) external whenNotPaused {
+        require(ownerOfPokemon[ownId] == msg.sender && ownerOfPokemon[oppId] == opponent, "Please enter pokemons you/your opponent own.");
+        pendingBattles[ownId][oppId] = BattleRequest({requested: true, requestTime: block.timestamp});
+    }
+
+    function acceptBattle(uint256 ownId, uint256 oppId) external whenNotPaused {
+        require(ownerOfPokemon[ownId] == msg.sender, "Not your pokemon!");
+        if(block.timestamp - pendingBattles[oppId][ownId].requestTime >= 1 days) {pendingBattles[oppId][ownId].requested = false;}
+        require(pendingBattles[oppId][ownId].requested == true, "No such pending battle!");
+        battle(ownId, oppId, ownerOfPokemon[oppId]);
+    }
+
+    function battle(uint256 ownId, uint256 oppId, address opponent) private whenNotPaused {
         require(ownerOfPokemon[oppId] == opponent, "Opponent does'nt own that pokemon!");
         require(block.timestamp - pokemons[ownId].lastBattleTime >= 600 &&
         block.timestamp - pokemons[oppId].lastBattleTime >= 600, "Pokemons still in cooldown!"
         );
         require(pokemons[ownId].inABattle != true && pokemons[oppId].inABattle != true, "Pokemons currently in a battle!");
 
-        PokemonData memory pokemon1 = pokemons[ownId];
-        PokemonData memory pokemon2 = pokemons[oppId];
+        PokemonData storage pokemon1 = pokemons[oppId];
+        PokemonData storage pokemon2 = pokemons[ownId];
         pokemon1.lastBattleTime = block.timestamp;
         pokemon2.lastBattleTime = block.timestamp;
         pokemon1.inABattle = true;
         pokemon2.inABattle = true;
         emit BattleStarted(msg.sender, opponent, ownId, oppId, block.timestamp);
         uint256 combinedStrength = pokemon1.strength + pokemon2.strength;
-        uint256 pokemon1WinProb = pokemon1.strength / combinedStrength * 100;
+        uint256 pokemon1WinProb = pokemon1.strength * 100 / combinedStrength;
+        uint256 pokemon2WinProb = 100 - pokemon1WinProb;
+        randNonce++;
         uint256 winningNumber = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender, randNonce))) % (100 - 1);
 
         if(winningNumber <= pokemon1WinProb) {
             pokemon1.totalWins += 1;
-            uint256 pok1StrengthBefore = pokemon1.strength;
-            pokemon1.strength += pokemon2.strength;   
+            pokemon1.strength += pokemon1WinProb;   
             if(pokemon1.strength > 1500) {pokemon1.strength = 1500;}
             pokemon2.totalLosses += 1;
-            pokemon2.strength -= pok1StrengthBefore / 2;   
-
-            //todo  can be a situation when pokemon2.strength is smaller than pokmeon1.strength / 2
-            //todo  can be a situation when some pokemons strength is as low as zero after some losses
-            
+            pokemon2.strength -= pokemon2WinProb / 2;
+            if(pokemon2.strength < 100) {pokemon2.strength = 100;}               
             emit BattleEnded(msg.sender, opponent, ownId, oppId, block.timestamp);
 
         } else {
             pokemon2.totalWins += 1;
-            uint256 pok2StrengthBefore = pokemon2.strength;
-            pokemon2.strength += pokemon1.strength;
+            pokemon2.strength += pokemon2WinProb;
             if(pokemon2.strength > 1500) {pokemon2.strength = 1500;}
             pokemon1.totalLosses += 1;
-            pokemon1.strength -= pok2StrengthBefore / 2;
+            pokemon1.strength -= pokemon1WinProb / 2;
+            if(pokemon1.strength < 100) {pokemon1.strength = 100;}   
             emit BattleEnded(opponent, msg.sender, oppId, ownId, block.timestamp);
         }
-
-
+        
         pokemon1.inABattle = false;
         pokemon2.inABattle = false;
     }
