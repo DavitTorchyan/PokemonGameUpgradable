@@ -198,16 +198,23 @@ describe("Pokemon", function () {
         }
       })
 
+      it("Should reject battle correctly.", async () => {
+        const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
+        await nft.connect(acc1).mint();
+        await nft.connect(acc2).mint();
+        await nft.connect(acc1).requestBattle(1, acc2.address, 2);
+        await nft.connect(acc2).rejectBattle(2, 1);
+        expect((await nft.pokemon(1)).pendingBattle).to.be.false;
+        expect((await nft.pokemon(2)).pendingBattle).to.be.false;
+        expect((await nft.pendingBattles(2, 1)).requested).to.be.false;
+      })
+
       it("Should be able to battle correctly after cooldown.", async () => {
         const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
         await nft.connect(acc2).mint();
-        let pokemon1 = await nft.pokemon(1);
-        let pokemon2 = await nft.pokemon(2);
         await nft.connect(acc1).requestBattle(1, acc2.address, 2);
-        const tx2 = await nft.connect(acc2).acceptBattle(2, 1);
-        pokemon1 = await nft.pokemon(1);
-        pokemon2 = await nft.pokemon(2);
+        await nft.connect(acc2).acceptBattle(2, 1);
         await time.increase(600);
         await nft.connect(acc1).requestBattle(1, acc2.address, 2);
         await expect(nft.connect(acc2).acceptBattle(2, 1)).not.to.be.reverted;
@@ -252,4 +259,5 @@ describe("Pokemon", function () {
       })      
 
     })
+    
 }) 

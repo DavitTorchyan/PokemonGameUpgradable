@@ -24,6 +24,8 @@ contract Pokemon is IERC721, Ownable, Pausable {
         uint256 totalWins;
         uint256 totalLosses;
         uint256 strength;
+        bool pendingBattle;
+        uint256 lastTrainingTime;
         bool inABattle;
     }
 
@@ -37,7 +39,6 @@ contract Pokemon is IERC721, Ownable, Pausable {
 
     // tokenId => PokemonData
     mapping(uint256 => PokemonData) private pokemons;
-    // tokenId => tokenId => true if in a battle...
     mapping(uint256 => mapping(uint256 => BattleRequest)) public pendingBattles;
     mapping(address => uint256) private balances;
     mapping(uint256 => address) private ownerOfPokemon;
@@ -74,7 +75,7 @@ contract Pokemon is IERC721, Ownable, Pausable {
         pokemons[totalSupply] = PokemonData({
         id: totalSupply, dna: _randomDna(), name: name, age: 0,
         birthTime: block.timestamp, lastBattleTime: 0, totalWins: 0, totalLosses: 0,
-        strength: _randomStrength(), inABattle: false
+        strength: _randomStrength(), pendingBattle: false, lastTrainingTime: 0, inABattle: false
         });
 
         emit Transfer(address(0), msg.sender, totalSupply);
@@ -145,14 +146,31 @@ contract Pokemon is IERC721, Ownable, Pausable {
 
     function requestBattle(uint256 ownId, address opponent, uint256 oppId) external whenNotPaused {
         require(ownerOfPokemon[ownId] == msg.sender && ownerOfPokemon[oppId] == opponent, "Please enter pokemons you/your opponent own.");
+        require(block.timestamp - pokemons[ownId].lastTrainingTime >= 1 days && block.timestamp - pokemons[oppId].lastTrainingTime >= 1 days,
+        "Can not request battle while in training cooldown!");
         pendingBattles[ownId][oppId] = BattleRequest({requested: true, requestTime: block.timestamp});
+        pokemons[ownId].pendingBattle = true;
+        pokemons[oppId].pendingBattle = true;
     }
 
     function acceptBattle(uint256 ownId, uint256 oppId) external whenNotPaused {
         require(ownerOfPokemon[ownId] == msg.sender, "Not your pokemon!");
-        if(block.timestamp - pendingBattles[oppId][ownId].requestTime >= 1 days) {pendingBattles[oppId][ownId].requested = false;}
+        require(pokemons[ownId].inABattle != true && pokemons[oppId].inABattle != true, "Pokemons currently in a battle!");
+        if(block.timestamp - pendingBattles[oppId][ownId].requestTime >= 1 days) {
+            pendingBattles[oppId][ownId].requested = false;
+            pokemons[ownId].pendingBattle = false;
+            pokemons[oppId].pendingBattle = false;
+            }
         require(pendingBattles[oppId][ownId].requested == true, "No such pending battle!");
         battle(ownId, oppId, ownerOfPokemon[oppId]);
+    }
+
+    function rejectBattle(uint256 ownId, uint256 oppId) external whenNotPaused {
+        require(ownerOfPokemon[ownId] == msg.sender, "Not your pokemon!");
+        require(pendingBattles[oppId][ownId].requested == true, "No such pending battle!");
+        pendingBattles[oppId][ownId].requested = false;
+        pokemons[ownId].pendingBattle = false;
+        pokemons[oppId].pendingBattle = false;
     }
 
     function battle(uint256 ownId, uint256 oppId, address opponent) private whenNotPaused {
@@ -160,7 +178,6 @@ contract Pokemon is IERC721, Ownable, Pausable {
         require(block.timestamp - pokemons[ownId].lastBattleTime >= 600 &&
         block.timestamp - pokemons[oppId].lastBattleTime >= 600, "Pokemons still in cooldown!"
         );
-        require(pokemons[ownId].inABattle != true && pokemons[oppId].inABattle != true, "Pokemons currently in a battle!");
 
         PokemonData storage pokemon1 = pokemons[oppId];
         PokemonData storage pokemon2 = pokemons[ownId];
@@ -181,7 +198,6 @@ contract Pokemon is IERC721, Ownable, Pausable {
             if(pokemon1.strength > 1500) {pokemon1.strength = 1500;}
             pokemon2.totalLosses += 1;
             pokemon2.strength -= pokemon2WinProb / 2;
-            if(pokemon2.strength < 100) {pokemon2.strength = 100;}               
             emit BattleEnded(msg.sender, opponent, ownId, oppId, block.timestamp);
 
         } else {
@@ -190,12 +206,20 @@ contract Pokemon is IERC721, Ownable, Pausable {
             if(pokemon2.strength > 1500) {pokemon2.strength = 1500;}
             pokemon1.totalLosses += 1;
             pokemon1.strength -= pokemon1WinProb / 2;
-            if(pokemon1.strength < 100) {pokemon1.strength = 100;}   
             emit BattleEnded(opponent, msg.sender, oppId, ownId, block.timestamp);
         }
         
         pokemon1.inABattle = false;
         pokemon2.inABattle = false;
+    }
+
+    function trainPokemon(uint256 id) external whenNotPaused {
+        require(ownerOfPokemon[id] == msg.sender, "Not your pokemon!");
+        require(pokemons[id].strength < 100, "Pokemon doesn't need training yet!");
+        require(pokemons[id].inABattle != true, "Can not train during a battle!");
+        require(pokemons[id].pendingBattle != true, "Can not train while having a pending battle!");
+        pokemons[id].strength = 100;
+        pokemons[id].lastTrainingTime = block.timestamp;
     }
 
     function pause() public onlyOwner {
