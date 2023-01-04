@@ -5,9 +5,12 @@ import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract Pokemon is IERC721, Ownable, Pausable {
+contract Pokemon is UUPSUpgradeable, OwnableUpgradeable, IERC721, PausableUpgradeable {
 
     string public name;
     string public symbol;
@@ -44,11 +47,18 @@ contract Pokemon is IERC721, Ownable, Pausable {
     mapping(uint256 => address) private ownerOfPokemon;
     mapping(address => mapping(address => mapping(uint256 => bool))) private allowances;
 
-    constructor(string memory name_, string memory symbol_) {
+    function initialize(string memory name_, string memory symbol_) public initializer {
         name = name_;
         symbol = symbol_;
         totalSupply = 0;
+        __Ownable_init();
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function _msgSender() internal view override(ContextUpgradeable) returns (address) {}
+
+    function _msgData() internal view override(ContextUpgradeable) returns (bytes memory) {}
 
     function balanceOf(address _owner) public view returns (uint256) {
         return balances[_owner];

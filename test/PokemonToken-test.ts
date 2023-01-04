@@ -1,17 +1,19 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { BigNumber } from "ethers";
 
 describe("Pokemon", function () {
   async function deployTokenFixture() {
     
-    const name = "PokemonNft";
-    const symbol = "PNFT";
     const [owner, acc1, acc2, acc3] = await ethers.getSigners();
-    const Nft = await ethers.getContractFactory("Pokemon");
-    const nft = await Nft.deploy(name, symbol);
+    const NftFactory = await ethers.getContractFactory("Pokemon");
+    const name = "NewPokemons";
+    const symbol = "NP"
+    const nft = await upgrades.deployProxy(NftFactory, [name, symbol], {initializer: 'initialize', kind: 'uups'});
+    await nft.deployed();
+
 
     return { nft, owner, acc1, acc2, acc3, name, symbol };
   }
@@ -258,6 +260,22 @@ describe("Pokemon", function () {
         to.be.revertedWith("Pokemons still in cooldown!");
       })      
 
+    })
+
+    describe("ContractUpgrade", () => {
+      it("Should upgrade the contract correctly.", async () => {
+          const { nft, owner } = await loadFixture(deployTokenFixture);
+          await nft.connect(owner).mint();
+          expect(await nft.totalSupply()).to.eq(1);
+          expect(await nft.ownerOf(1)).to.eq(owner.address);
+  
+          const NftFactoryV2 = await ethers.getContractFactory("PokemonV2");
+          const nft2 = await upgrades.upgradeProxy(nft.address, NftFactoryV2);
+  
+          expect(await nft2.totalSupply()).to.eq(1);
+          expect(await nft2.ownerOf(1)).to.eq(owner.address);
+          expect(await nft2.contractVersion()).to.eq("Contract upgraded! Contract version: 2");
+      })
     })
     
 }) 
