@@ -5,6 +5,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { BigNumber } from "ethers";
 
 describe("Pokemon", function () {
+
   async function deployTokenFixture() {
     
     const [owner, acc1, acc2, acc3] = await ethers.getSigners();
@@ -19,6 +20,7 @@ describe("Pokemon", function () {
   }
 
     describe("Deployment", () => {
+
       it("Should deploy with correct args.", async () => {
         const { nft, name, symbol } = await loadFixture(deployTokenFixture);
         expect(await nft.name()).to.eq(name);
@@ -48,9 +50,11 @@ describe("Pokemon", function () {
         await expect(nft.connect(acc1).mint()).to.emit(nft, "Transfer").
         withArgs(ethers.constants.AddressZero, acc1.address, 1);
       })
+
     })
 
     describe("Approving", () => {
+
       it("Should approve correctly.", async () => {
         const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
@@ -82,6 +86,7 @@ describe("Pokemon", function () {
     })
 
     describe("Transfering", () => {
+
       it("Should transfer correctly.", async () => {
         const { nft, acc1, owner } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
@@ -132,9 +137,11 @@ describe("Pokemon", function () {
         await expect(nft.connect(acc2).transferFrom(acc1.address, owner.address, 1)).
         to.emit(nft, "Transfer").withArgs(acc1.address, owner.address, 1);
       })
+
     })
 
     describe("Pausing", () => {
+
       it("Should pause the contract successfuly.", async () => {
         const { nft, acc1, acc2, owner } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
@@ -162,9 +169,11 @@ describe("Pokemon", function () {
         await expect(nft.connect(acc2).requestBattle(1, owner.address, 3)).not.to.be.reverted;
         await expect(nft.connect(owner).acceptBattle(3, 1)).not.to.be.reverted;
       })
+
     })
 
     describe("Battle", () => {
+
       it("Should request battle correctly.", async () => {
         const { nft, acc1, acc2 } = await loadFixture(deployTokenFixture);
         await nft.connect(acc1).mint();
@@ -263,19 +272,21 @@ describe("Pokemon", function () {
     })
 
     describe("ContractUpgrade", () => {
+      
       it("Should upgrade the contract correctly.", async () => {
-          const { nft, owner } = await loadFixture(deployTokenFixture);
-          await nft.connect(owner).mint();
-          expect(await nft.totalSupply()).to.eq(1);
-          expect(await nft.ownerOf(1)).to.eq(owner.address);
-  
-          const NftFactoryV2 = await ethers.getContractFactory("PokemonV2");
-          const nft2 = await upgrades.upgradeProxy(nft.address, NftFactoryV2);
-  
-          expect(await nft2.totalSupply()).to.eq(1);
-          expect(await nft2.ownerOf(1)).to.eq(owner.address);
-          expect(await nft2.contractVersion()).to.eq("Contract upgraded! Contract version: 2");
+        const { nft, owner } = await loadFixture(deployTokenFixture);
+        await nft.connect(owner).mint();
+        expect(await nft.totalSupply()).to.eq(1);
+        expect(await nft.ownerOf(1)).to.eq(owner.address);
+
+        const NftFactoryV2 = await ethers.getContractFactory("PokemonV2");
+        const nft2 = await upgrades.upgradeProxy(nft.address, NftFactoryV2);
+
+        expect(await nft2.totalSupply()).to.eq(1);
+        expect(await nft2.ownerOf(1)).to.eq(owner.address);
+        expect(await nft2.contractVersion()).to.eq("Contract upgraded! Contract version: 2");
       })
+
     })
     
 }) 
